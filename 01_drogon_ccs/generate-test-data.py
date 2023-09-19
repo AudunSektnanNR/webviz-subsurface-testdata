@@ -239,14 +239,17 @@ def generate_date_table_entry(
     ia, ig, oa, og = simulate_containment(surface_template, saturation, boundary, seed)
     return {
         "total": ia + ig + oa + og,
-        "total_inside": ia + ig,
-        "total_outside": oa + og,
-        "total_gas": ig + og,
-        "total_aqueous": ia + oa,
-        "total_gas_inside": ig,
-        "total_aqueous_inside": ia,
-        "total_gas_outside": og,
-        "total_aqueous_outside": oa,
+        "contained": ia + ig,
+        "outside": oa + og,
+        "hazardous": 0.0,  # NBNB-AS
+        "gas": ig + og,
+        "aqueous": ia + oa,
+        "gas_contained": ig,
+        "aqueous_contained": ia,
+        "gas_outside": og,
+        "aqueous_outside": oa,
+        "gas_hazardous": 0.0,  # NBNB-AS
+        "aqueous_hazardous": 0.0,  # NBNB-AS
     }
 
 
