@@ -3,8 +3,9 @@ This script generates data for the webviz subsurface plugin "CO2 Leakage". The d
 generation is done in an ad-hoc and pragmatic manner. The primary purpose is to adhere to
 the folder structure, file formats and naming conventions expected by the plugin.
 
-The script only depends on `input/leakage_boundary.csv` and fault polygon data from
-01_drogon_ahm, all of which are copied to the underlying realization folders.
+The script only depends on `input/leakage_boundary.csv`, `input/hazardeous_boundary.csv`
+and fault polygon data from 01_drogon_ahm, all of which are copied to the underlying
+realization folders.
 """
 import datetime
 import pathlib
@@ -239,6 +240,7 @@ def setup_ensemble_folders(ens_root, input_folder, polygons_folder):
     for f in polygons_folder.glob("*gl_faultlines_extract_postprocess.pol"):
         shutil.copy(f, res_root / "polygons")
     shutil.copy(input_folder / "leakage_boundary.csv", res_root / "polygons")
+    shutil.copy(input_folder / "hazardeous_boundary.csv", res_root / "polygons")
     # Write dummy OK and STATUS files
     t = "13:42:37"
     with open(ens_root / "iter-0" / "OK", "w") as f:
