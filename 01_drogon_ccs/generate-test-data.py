@@ -3,7 +3,7 @@ This script generates data for the webviz subsurface plugin "CO2 Leakage". The d
 generation is done in an ad-hoc and pragmatic manner. The primary purpose is to adhere to
 the folder structure, file formats and naming conventions expected by the plugin.
 
-The script only depends on `input/leakage_boundary.csv`, `input/hazardeous_boundary.csv`
+The script only depends on `input/leakage_boundary.csv`, `input/hazardous_boundary.csv`
 and fault polygon data from 01_drogon_ahm, all of which are copied to the underlying
 realization folders.
 """
@@ -192,14 +192,14 @@ def simulate_containment(
     tmpl: xtgeo.RegularSurface,
     saturation,
     containment_boundary: sg.Polygon,
-    hazardeous_boundary: sg.Polygon,
+    hazardous_boundary: sg.Polygon,
     seed,
     calc_volume: bool = False,
 ):
     x_lin = tmpl.xmin + np.arange(tmpl.ncol) * tmpl.xinc
     y_lin = tmpl.ymin + np.arange(tmpl.nrow) * tmpl.yinc
     poly_map_con = map_polygons(x_lin, y_lin, [containment_boundary])
-    poly_map_haz = map_polygons(x_lin, y_lin, [hazardeous_boundary])
+    poly_map_haz = map_polygons(x_lin, y_lin, [hazardous_boundary])
     gen = np.random.RandomState(seed)
     volumes = gen.uniform(7, 13, size=poly_map_con.shape) * resolution(x_lin, y_lin) ** 2
     if calc_volume:
@@ -216,16 +216,16 @@ def simulate_containment(
     is_outside = np.array(is_outside)
     contained = prop[is_contained].sum()
     outside = prop[is_outside].sum()
-    hazardeous = prop[poly_map_haz].sum()
+    hazardous = prop[poly_map_haz].sum()
 
     # Simulate fractions
     aqu_contained = contained * gen.uniform(high=0.1)
     gas_contained = contained - aqu_contained
     aqu_outside = outside * gen.uniform(high=0.1)
     gas_outside = outside - aqu_outside
-    aqu_hazardeous = hazardeous * gen.uniform(high=0.1)
-    gas_hazardeous = hazardeous - aqu_hazardeous
-    return aqu_contained, gas_contained, aqu_outside, gas_outside, aqu_hazardeous, gas_hazardeous
+    aqu_hazardous = hazardous * gen.uniform(high=0.1)
+    gas_hazardous = hazardous - aqu_hazardous
+    return aqu_contained, gas_contained, aqu_outside, gas_outside, aqu_hazardous, gas_hazardous
 
 
 def setup_ensemble_folders(ens_root, input_folder, polygons_folder):
@@ -240,7 +240,7 @@ def setup_ensemble_folders(ens_root, input_folder, polygons_folder):
     for f in polygons_folder.glob("*gl_faultlines_extract_postprocess.pol"):
         shutil.copy(f, res_root / "polygons")
     shutil.copy(input_folder / "leakage_boundary.csv", res_root / "polygons")
-    shutil.copy(input_folder / "hazardeous_boundary.csv", res_root / "polygons")
+    shutil.copy(input_folder / "hazardous_boundary.csv", res_root / "polygons")
     # Write dummy OK and STATUS files
     t = "13:42:37"
     with open(ens_root / "iter-0" / "OK", "w") as f:
@@ -255,7 +255,7 @@ def generate_date_table_entry(
     surface_template: xtgeo.RegularSurface,
     saturation: xtgeo.RegularSurface,
     containment_boundary: sg.Polygon,
-    hazardeous_boundary: sg.Polygon,
+    hazardous_boundary: sg.Polygon,
     seed: int,
     calc_volume: bool = False,
 ):
@@ -263,7 +263,7 @@ def generate_date_table_entry(
         surface_template,
         saturation,
         containment_boundary,
-        hazardeous_boundary,
+        hazardous_boundary,
         seed,
         calc_volume,
     )
@@ -291,8 +291,8 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
     containment_boundary = sg.Polygon(np.genfromtxt(
         input_folder / "leakage_boundary.csv", skip_header=1, delimiter=','
     ))
-    hazardeous_boundary = sg.Polygon(np.genfromtxt(
-        input_folder / "hazardeous_boundary.csv", skip_header=1, delimiter=','
+    hazardous_boundary = sg.Polygon(np.genfromtxt(
+        input_folder / "hazardous_boundary.csv", skip_header=1, delimiter=','
     ))
     tmpl = xtgeo.RegularSurface(
         ncol=279, nrow=341, xinc=25.0, yinc=25.0, xori=460063.6875, yori=5929551.0
@@ -323,14 +323,14 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
         )
         mass_containments += [
             dict(
-                **generate_date_table_entry(tmpl, s, containment_boundary, hazardeous_boundary, (base_seed + 1) % 2**32),
+                **generate_date_table_entry(tmpl, s, containment_boundary, hazardous_boundary, (base_seed + 1) % 2**32),
                 date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
             )
             for t, s in sgas.items()
         ]
         volume_containments += [
             dict(
-                **generate_date_table_entry(tmpl, s, containment_boundary, hazardeous_boundary, (base_seed + 1) % 2**32, True),
+                **generate_date_table_entry(tmpl, s, containment_boundary, hazardous_boundary, (base_seed + 1) % 2**32, True),
                 date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
             )
             for t, s in sgas.items()
