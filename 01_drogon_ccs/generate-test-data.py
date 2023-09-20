@@ -188,18 +188,25 @@ def generate_maps(output_dir, surface_name, time_steps, init_mig_dist, **kwargs)
 
 
 def simulate_containment(
-    tmpl: xtgeo.RegularSurface, saturation, polygon: sg.Polygon, seed
+    tmpl: xtgeo.RegularSurface,
+    saturation,
+    polygon: sg.Polygon,
+    seed,
+    calc_volume: bool = False,
 ):
     x_lin = tmpl.xmin + np.arange(tmpl.ncol) * tmpl.xinc
     y_lin = tmpl.ymin + np.arange(tmpl.nrow) * tmpl.yinc
     poly_map = map_polygons(x_lin, y_lin, [polygon])
     gen = np.random.RandomState(seed)
     volumes = gen.uniform(7, 13, size=poly_map.shape) * resolution(x_lin, y_lin) ** 2
-    poro = 0.3
-    density = 700
-    mass = poro * volumes * density * saturation
-    within = mass[poly_map].sum()
-    outside = mass[~poly_map].sum()
+    if calc_volume:
+        prop = volumes * saturation
+    else:  # Calculate CO2 mass
+        poro = 0.3
+        density = 700
+        prop = poro * volumes * density * saturation
+    within = prop[poly_map].sum()
+    outside = prop[~poly_map].sum()
     # Simulate fractions
     aqu_within = within * gen.uniform(high=0.1)
     gas_within = within - aqu_within
@@ -235,8 +242,9 @@ def generate_date_table_entry(
     saturation: xtgeo.RegularSurface,
     boundary: sg.Polygon,
     seed: int,
+    calc_volume: bool = False,
 ):
-    ia, ig, oa, og = simulate_containment(surface_template, saturation, boundary, seed)
+    ia, ig, oa, og = simulate_containment(surface_template, saturation, boundary, seed, calc_volume)
     return {
         "total": ia + ig + oa + og,
         "total_contained": ia + ig,
@@ -271,7 +279,8 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
         "topvolon": 70,
         "toptherys": 70,
     }
-    containments = []
+    mass_containments = []
+    volume_containments = []
     for sn, imd in mig_dists.items():
         sgas, amfg = generate_maps(
             res_root / "maps",
@@ -287,17 +296,29 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
             cutoff=8,
             seed=base_seed,
         )
-        containments += [
+        mass_containments += [
             dict(
                 **generate_date_table_entry(tmpl, s, boundary, (base_seed + 1) % 2**32),
                 date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
             )
             for t, s in sgas.items()
         ]
-    df = pd.DataFrame.from_records(containments)
-    df.groupby('date').sum().to_csv(res_root / "tables/co2_volumes.csv")
-    shutil.copyfile(res_root / "tables/co2_volumes.csv", res_root / "tables/plume_volume_actual.csv")
-    shutil.copyfile(res_root / "tables/co2_volumes.csv", res_root / "tables/plume_volume_actual_simple.csv")
+        volume_containments += [
+            dict(
+                **generate_date_table_entry(tmpl, s, boundary, (base_seed + 1) % 2**32, True),
+                date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
+            )
+            for t, s in sgas.items()
+        ]
+    df_mass = pd.DataFrame.from_records(mass_containments)
+    df_plume_volume_actual = pd.DataFrame.from_records(volume_containments)
+    df_mass = df_mass.groupby('date').sum()
+    df_plume_volume_actual = df_plume_volume_actual.groupby('date').sum()
+    df_plume_volume_actual_simple = df_plume_volume_actual * 0.8
+
+    df_mass.to_csv(res_root / "tables/co2_volumes.csv")
+    df_plume_volume_actual.to_csv(res_root / "tables/plume_volume_actual.csv")
+    df_plume_volume_actual_simple.to_csv(res_root / "tables/plume_volume_actual_simple.csv")
 
 
 if __name__ == '__main__':
