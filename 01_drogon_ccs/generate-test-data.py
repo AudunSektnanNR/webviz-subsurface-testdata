@@ -190,29 +190,41 @@ def generate_maps(output_dir, surface_name, time_steps, init_mig_dist, **kwargs)
 def simulate_containment(
     tmpl: xtgeo.RegularSurface,
     saturation,
-    polygon: sg.Polygon,
+    containment_boundary: sg.Polygon,
+    hazardeous_boundary: sg.Polygon,
     seed,
     calc_volume: bool = False,
 ):
     x_lin = tmpl.xmin + np.arange(tmpl.ncol) * tmpl.xinc
     y_lin = tmpl.ymin + np.arange(tmpl.nrow) * tmpl.yinc
-    poly_map = map_polygons(x_lin, y_lin, [polygon])
+    poly_map_con = map_polygons(x_lin, y_lin, [containment_boundary])
+    poly_map_haz = map_polygons(x_lin, y_lin, [hazardeous_boundary])
     gen = np.random.RandomState(seed)
-    volumes = gen.uniform(7, 13, size=poly_map.shape) * resolution(x_lin, y_lin) ** 2
+    volumes = gen.uniform(7, 13, size=poly_map_con.shape) * resolution(x_lin, y_lin) ** 2
     if calc_volume:
         prop = volumes * saturation
     else:  # Calculate CO2 mass
         poro = 0.3
         density = 700
         prop = poro * volumes * density * saturation
-    within = prop[poly_map].sum()
-    outside = prop[~poly_map].sum()
+    is_contained, is_outside = [], []
+    for a, b in zip(poly_map_con, poly_map_haz):
+        is_contained.append([x if not y else False for x, y in zip(a, b)])
+        is_outside.append([not x and not y for x, y in zip(a, b)])
+    is_contained = np.array(is_contained)
+    is_outside = np.array(is_outside)
+    contained = prop[is_contained].sum()
+    outside = prop[is_outside].sum()
+    hazardeous = prop[poly_map_haz].sum()
+
     # Simulate fractions
-    aqu_within = within * gen.uniform(high=0.1)
-    gas_within = within - aqu_within
+    aqu_contained = contained * gen.uniform(high=0.1)
+    gas_contained = contained - aqu_contained
     aqu_outside = outside * gen.uniform(high=0.1)
     gas_outside = outside - aqu_outside
-    return aqu_within, gas_within, aqu_outside, gas_outside
+    aqu_hazardeous = hazardeous * gen.uniform(high=0.1)
+    gas_hazardeous = hazardeous - aqu_hazardeous
+    return aqu_contained, gas_contained, aqu_outside, gas_outside, aqu_hazardeous, gas_hazardeous
 
 
 def setup_ensemble_folders(ens_root, input_folder, polygons_folder):
@@ -240,24 +252,32 @@ def setup_ensemble_folders(ens_root, input_folder, polygons_folder):
 def generate_date_table_entry(
     surface_template: xtgeo.RegularSurface,
     saturation: xtgeo.RegularSurface,
-    boundary: sg.Polygon,
+    containment_boundary: sg.Polygon,
+    hazardeous_boundary: sg.Polygon,
     seed: int,
     calc_volume: bool = False,
 ):
-    ia, ig, oa, og = simulate_containment(surface_template, saturation, boundary, seed, calc_volume)
+    ca, cg, oa, og, ha, hg = simulate_containment(
+        surface_template,
+        saturation,
+        containment_boundary,
+        hazardeous_boundary,
+        seed,
+        calc_volume,
+    )
     return {
-        "total": ia + ig + oa + og,
-        "total_contained": ia + ig,
+        "total": ca + cg + oa + og + ha + hg,
+        "total_contained": ca + cg,
         "total_outside": oa + og,
-        "total_hazardous": 0.0,  # NBNB-AS
-        "total_gas": ig + og,
-        "total_aqueous": ia + oa,
-        "gas_contained": ig,
-        "aqueous_contained": ia,
+        "total_hazardous": ha + hg,
+        "total_gas": cg + og + hg,
+        "total_aqueous": ca + oa + ha,
+        "gas_contained": cg,
+        "aqueous_contained": ca,
         "gas_outside": og,
         "aqueous_outside": oa,
-        "gas_hazardous": 0.0,  # NBNB-AS
-        "aqueous_hazardous": 0.0,  # NBNB-AS
+        "gas_hazardous": hg,
+        "aqueous_hazardous": ha,
     }
 
 
@@ -266,8 +286,11 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
     polys = read_polylines(
         res_root / "polygons" / "topvolantis--gl_faultlines_extract_postprocess.csv"
     )
-    boundary = sg.Polygon(np.genfromtxt(
+    containment_boundary = sg.Polygon(np.genfromtxt(
         input_folder / "leakage_boundary.csv", skip_header=1, delimiter=','
+    ))
+    hazardeous_boundary = sg.Polygon(np.genfromtxt(
+        input_folder / "hazardeous_boundary.csv", skip_header=1, delimiter=','
     ))
     tmpl = xtgeo.RegularSurface(
         ncol=279, nrow=341, xinc=25.0, yinc=25.0, xori=460063.6875, yori=5929551.0
@@ -298,14 +321,14 @@ def main(ens_root, input_folder, polygons_folder, base_seed):
         )
         mass_containments += [
             dict(
-                **generate_date_table_entry(tmpl, s, boundary, (base_seed + 1) % 2**32),
+                **generate_date_table_entry(tmpl, s, containment_boundary, hazardeous_boundary, (base_seed + 1) % 2**32),
                 date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
             )
             for t, s in sgas.items()
         ]
         volume_containments += [
             dict(
-                **generate_date_table_entry(tmpl, s, boundary, (base_seed + 1) % 2**32, True),
+                **generate_date_table_entry(tmpl, s, containment_boundary, hazardeous_boundary, (base_seed + 1) % 2**32, True),
                 date=f"{t[:4]}-{t[4:6]}-{t[6:8]}",
             )
             for t, s in sgas.items()
